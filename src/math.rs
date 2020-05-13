@@ -73,9 +73,9 @@ impl Mul<f64> for Vector3 {
 }
 #[derive(Debug, Copy, Clone)]
 pub struct Matrix3x3 {
-    c0: Vector3,
-    c1: Vector3,
-    c2: Vector3,
+    pub c0: Vector3,
+    pub c1: Vector3,
+    pub c2: Vector3,
 }
 
 impl Matrix3x3 {
