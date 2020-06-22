@@ -1,3 +1,4 @@
+//! This library is incomplete and undertested. Don't use it yet.
 mod color;
 mod color_space;
 mod math;

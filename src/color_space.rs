@@ -17,6 +17,7 @@ pub struct Chromacity {
 }
 
 /// If the color space stores RGB values nonlinearly this specifies how to make them linear.
+/// This should be possible to express numerically.
 #[derive(Debug, Copy, Clone)]
 pub enum TransferFunction {
     /// Use the sRGB transfer function
