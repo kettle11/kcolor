@@ -1,7 +1,7 @@
 // Select snippets from kettlemath extracted for use in this library and made to use f64.
 
 use std::ops::{Mul, Sub};
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Vector3 {
     pub x: f64,
     pub y: f64,
@@ -71,7 +71,7 @@ impl Mul<f64> for Vector3 {
         }
     }
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Matrix3x3 {
     pub c0: Vector3,
     pub c1: Vector3,
@@ -130,6 +130,33 @@ impl Matrix3x3 {
     }
 }
 
+impl Mul<Matrix3x3> for Matrix3x3 {
+    type Output = Self;
+    #[inline]
+    fn mul(self, other: Self) -> Self {
+        let row0 = self.row0();
+        let row1 = self.row1();
+        let row2 = self.row2();
+
+        Self {
+            c0: Vector3::new(
+                Vector3::dot(row0, other.c0),
+                Vector3::dot(row1, other.c0),
+                Vector3::dot(row2, other.c0),
+            ),
+            c1: Vector3::new(
+                Vector3::dot(row0, other.c1),
+                Vector3::dot(row1, other.c1),
+                Vector3::dot(row2, other.c1),
+            ),
+            c2: Vector3::new(
+                Vector3::dot(row0, other.c2),
+                Vector3::dot(row1, other.c2),
+                Vector3::dot(row2, other.c2),
+            ),
+        }
+    }
+}
 impl Mul<Vector3> for Matrix3x3 {
     type Output = Vector3;
     #[inline]
