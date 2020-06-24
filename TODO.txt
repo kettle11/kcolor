@@ -1,2 +1,0 @@
-Add, Multiply, Subtract, Lerp
-Color space conversions.
