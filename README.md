@@ -1,6 +1,10 @@
 # kettlecolor
-A Rust library for handling color in interactive applications (Work in progress)
+A Rust library for handling color. (Work in progress)
 
-This library is a work in progress, but it aims to be a small yet handy collection of utilities for working with colors.
+The primary goal of this library is to provide a simple way to handle colors when the output color space of a monitor is not known at compile time.
 
-Right now this is a work in progress and for my personal use. Likely it is full of issues and will change frequently.
+sRGB has long been the standard, but many modern devices support wider color gamuts and it's no longer appropriate to simply assume the monitor's color space is sRGB.
+
+Let's write software that supports better colors!
+
+Right now this library is very much a work in progress intended for my personal use. Likely it is full of issues and will change frequently.
