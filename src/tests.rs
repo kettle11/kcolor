@@ -19,10 +19,19 @@ fn srgb_constant() {
         Chromaticity::new(0.64, 0.33),
         Chromaticity::new(0.3, 0.6),
         Chromaticity::new(0.15, 0.06),
-        ColorSpace::D65_WHITE_POINT,
+        ColorSpace::D65_WHITE_POINT_2DEGREES,
         SRGBTransferFunction,
     );
 
+    println!(
+        "XYZ D65: {:?}",
+        ColorSpace::D65_WHITE_POINT_2DEGREES.to_XYZ()
+    );
+
+    println!(
+        "XYZ D50: {:?}",
+        ColorSpace::D50_WHITE_POINT_2DEGREES.to_XYZ()
+    );
     assert!(srgb_color_space == ColorSpace::SRGB);
 }
 
@@ -33,11 +42,22 @@ fn srgb_linear_constant() {
         Chromaticity::new(0.64, 0.33),
         Chromaticity::new(0.3, 0.6),
         Chromaticity::new(0.15, 0.06),
-        ColorSpace::D65_WHITE_POINT,
+        ColorSpace::D65_WHITE_POINT_2DEGREES,
         TransferFunction::None,
     );
 
     assert!(srgb_linear_color_space == ColorSpace::SRGB_LINEAR);
+}
+
+#[test]
+fn rec2020_constant() {
+    let rec2020 = ColorSpace::new(
+        Chromaticity::new(0.708, 0.292),
+        Chromaticity::new(0.170, 0.797),
+        Chromaticity::new(0.131, 0.046),
+        Chromaticity::new(0.3127, 0.3290),
+        SRGBTransferFunction,
+    );
 }
 
 // Tests that sRGB values converted to and from a Color remain the same.
@@ -58,8 +78,6 @@ fn srgb_negative() {
     let color = Color::new_srgb(color_f64.0, color_f64.1, color_f64.2, color_f64.3);
     let color_rgba = color.to_srgb_unclipped();
 
-    println!("Color: {:?}", color);
-    println!("RGBA: {:?}", color_rgba);
     assert!(approx_equal(color_f64, color_rgba));
 }
 
@@ -74,7 +92,7 @@ fn display_p3_to_srgb() {
         Chromaticity { x: 0.68, y: 0.32 },
         Chromaticity { x: 0.265, y: 0.69 },
         Chromaticity { x: 0.15, y: 0.06 },
-        ColorSpace::D65_WHITE_POINT,
+        ColorSpace::D65_WHITE_POINT_2DEGREES,
         SRGBTransferFunction,
     );
 
@@ -88,9 +106,9 @@ fn display_p3_to_srgb() {
     assert!(
         color_srgb_unclipped
             == (
-                1.0921700914213934,
-                -0.19516672953602265,
-                -0.09607923656141225,
+                1.0921879782796478,
+                -0.19514273356049316,
+                -0.09605276588269357,
                 1.0
             )
     );
@@ -103,7 +121,7 @@ fn srgb_to_display_p3() {
         Chromaticity { x: 0.68, y: 0.32 },
         Chromaticity { x: 0.265, y: 0.69 },
         Chromaticity { x: 0.15, y: 0.06 },
-        ColorSpace::D65_WHITE_POINT,
+        ColorSpace::D65_WHITE_POINT_2DEGREES,
         SRGBTransferFunction,
     );
 
@@ -114,9 +132,9 @@ fn srgb_to_display_p3() {
     assert!(
         color_p3
             == (
-                0.9183766263231892,
-                0.22905441360408713,
-                0.1790212430236189,
+                0.9183615101484551,
+                0.22903577835661088,
+                0.17900683669777345,
                 1.0
             )
     );
@@ -127,25 +145,27 @@ fn srgb_to_display_p3() {
 /// similar to different XYZ values under another white point.
 #[test]
 fn chromatic_adaptation() {
-    let chromatic_adaptation =
-        ChromaticAdaptation::new(ColorSpace::D65_WHITE_POINT, ColorSpace::D50_WHITE_POINT);
+    let chromatic_adaptation = ChromaticAdaptation::new(
+        ColorSpace::D65_WHITE_POINT_2DEGREES,
+        ColorSpace::D50_WHITE_POINT_2DEGREES,
+    );
 
     let expected = ChromaticAdaptation {
         inner_matrix: Matrix3x3 {
             c0: Vector3 {
-                x: 1.0478112719598691,
-                y: 0.029542405202826368,
-                z: -0.009234507223803406,
+                x: 1.0478525845440954,
+                y: 0.029572248856658313,
+                z: -0.009236714296679653,
             },
             c1: Vector3 {
-                x: 0.022886525214775758,
-                y: 0.9904844613128458,
-                z: 0.015043570198253024,
+                x: 0.02290732994257212,
+                y: 0.990466768707076,
+                z: 0.01504624134331152,
             },
             c2: Vector3 {
-                x: -0.05012693920986061,
-                y: -0.017049121601636838,
-                z: 0.7521316440046968,
+                x: -0.05014632654226729,
+                y: -0.017056695503451035,
+                z: 0.7520622162770808,
             },
         },
     };

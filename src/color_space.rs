@@ -23,7 +23,7 @@ pub enum TransferFunction {
 }
 
 /// Chromaticity values represent the hue of a color, irrespective of brightness
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Chromaticity {
     pub x: f64,
     pub y: f64,
@@ -32,6 +32,10 @@ pub struct Chromaticity {
 impl Chromaticity {
     pub fn new(x: f64, y: f64) -> Self {
         Chromaticity { x, y }
+    }
+
+    pub fn to_XYZ(&self) -> XYZ {
+        XYZ::new(self.x / self.y, 1.0, (1.0 - self.x - self.y) / self.y)
     }
 }
 
@@ -42,60 +46,61 @@ pub struct XYZ {
     pub Z: f64,
 }
 
+impl XYZ {
+    pub fn new(X: f64, Y: f64, Z: f64) -> Self {
+        Self { X, Y, Z }
+    }
+
+    pub fn to_vector3(&self) -> Vector3 {
+        Vector3::new(self.X, self.Y, self.Z)
+    }
+}
+
 impl ColorSpace {
-    /// Primaries are specified as xy chromaticity values.
-    /// White point is specified in XYZ space
-    /// The white point represents the brightest color that can be represented.
+    /// 'Primaries' are the color that represents the reddest red, the greenest green, and the bluest blue in the color space.
+    /// The 'White point' represents the 'whitest white' and also the brightest color.
+    /// The white point is the color when all other primaries are set to their max value.
+    ///
+    /// The primaries and the white point are specified with 'chromaticity' values.
+    /// A chromaticity is an x, y coordinate that specifies the hue of a color, irrespective of brightness.
+    ///
+    /// A 'transfer function' modifies the way colors are stored numerically to allow storing more colors within
+    /// the ranges of colors that humans are most sensitive to color changes.
+    /// Color spaces have different transfer functions.
     /// More info:
     /// https://en.wikipedia.org/wiki/CIE_1931_color_space#CIE_xy_chromaticity_diagram_and_the_CIE_xyY_color_space
     pub fn new(
         red_primary: Chromaticity,
         green_primary: Chromaticity,
         blue_primary: Chromaticity,
-        white_point: XYZ,
+        white_point: Chromaticity,
         transfer_function: TransferFunction,
     ) -> Self {
         // Reference:
         // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
 
-        // Do the RGB values this converts need to be between 0 and 1 as noted at the above link?
-
-        // First convert the chromaticity primaries into XYZ space.
-        let r = Vector3::new(
-            red_primary.x / red_primary.y,
-            1.0,
-            (1.0 - red_primary.x - red_primary.y) / red_primary.y,
-        );
-
-        let g = Vector3::new(
-            green_primary.x / green_primary.y,
-            1.0,
-            (1.0 - green_primary.x - green_primary.y) / green_primary.y,
-        );
-
-        let b = Vector3::new(
-            blue_primary.x / blue_primary.y,
-            1.0,
-            (1.0 - blue_primary.x - blue_primary.y) / blue_primary.y,
-        );
+        // First convert the chromaticities into XYZ values.
+        let r = red_primary.to_XYZ().to_vector3();
+        let g = green_primary.to_XYZ().to_vector3();
+        let b = blue_primary.to_XYZ().to_vector3();
 
         let inverse = Matrix3x3::from_columns(r, g, b).inverse();
-        let s = inverse * Vector3::new(white_point.X, white_point.Y, white_point.Z);
+        let s = inverse * white_point.to_XYZ().to_vector3();
 
         // The three primaries in XYZ space relative to the white point passed in.
         let sr = r * s.x;
         let sg = g * s.y;
         let sb = b * s.z;
 
-        // The D50 white point is used to store colors internally
+        // The 2 degrees D50 white point is used to store colors internally
         // If the color space being declared is not relative to the D50 white point then the primaries must
         // be converted to be relative to D50.
-        // D50 is used because ICC profiles are always specified with D50 and this might avoid conversions.
-        let (to_XYZ, from_XYZ) = if white_point != Self::D50_WHITE_POINT {
+        // 2 degrees D50 is used because ICC profiles are always specified with the 2 degrees D50 white point.
+        let (to_XYZ, from_XYZ) = if white_point != Self::D50_WHITE_POINT_2DEGREES {
             let white_point_adaptation =
-                ChromaticAdaptation::new(white_point, Self::D50_WHITE_POINT);
+                ChromaticAdaptation::new(white_point, Self::D50_WHITE_POINT_2DEGREES);
             let white_point_adaptation_inverse =
-                ChromaticAdaptation::new(Self::D50_WHITE_POINT, white_point);
+                ChromaticAdaptation::new(Self::D50_WHITE_POINT_2DEGREES, white_point);
             (
                 white_point_adaptation.inner_matrix * Matrix3x3::from_columns(sr, sg, sb),
                 Matrix3x3::from_columns(sr, sg, sb).inverse()
@@ -181,43 +186,40 @@ impl ColorSpace {
     /// Red primary x: 0.64 y: 0.33
     /// Green primary x: 0.3 y: 0.6
     /// Blue primary x: 0.15 y: 0.06
-    /// White point (D65) as expressed in CIE XYZ 1931
-    /// X: 0.95047
-    /// Y: 1.0
-    /// Z: 1.08883
+    /// White point: D65
     pub const SRGB: ColorSpace = ColorSpace {
         to_XYZ: Matrix3x3 {
             c0: Vector3 {
-                x: 0.43607469963825646,
-                y: 0.222504483975651,
-                z: 0.013932161672457605,
+                x: 0.4360219083775758,
+                y: 0.2224751872467074,
+                z: 0.013928117106761706,
             },
             c1: Vector3 {
-                x: 0.3850648611372289,
-                y: 0.716878635320373,
-                z: 0.09710449715679705,
+                x: 0.3851088006156898,
+                y: 0.7169066518920372,
+                z: 0.09710152837405213,
             },
             c2: Vector3 {
-                x: 0.1430804288791148,
-                y: 0.0606169168164421,
-                z: 0.714173287229624,
+                x: 0.14308127508123153,
+                y: 0.06061819697439862,
+                z: 0.7141585850968147,
             },
         },
         from_XYZ: Matrix3x3 {
             c0: Vector3 {
-                x: 3.133856249539148,
-                y: -0.9787684078627121,
-                z: 0.07194527939311902,
+                x: 3.1343114039056417,
+                y: -0.9787437136662901,
+                z: 0.07194820563461289,
             },
             c1: Vector3 {
-                x: -1.6168669988366775,
-                y: 1.9161416785529983,
-                z: -0.22899148609006847,
+                x: -1.6172327952102319,
+                y: 1.9161142278544896,
+                z: -0.228986525310954,
             },
             c2: Vector3 {
-                x: -0.49061436913474804,
-                y: 0.03345383938196561,
-                z: 1.4052427250084898,
+                x: -0.49068542505272716,
+                y: 0.03344963562366052,
+                z: 1.4052709721322223,
             },
         },
         transfer_function: SRGBTransferFunction,
@@ -227,36 +229,36 @@ impl ColorSpace {
     pub const SRGB_LINEAR: ColorSpace = ColorSpace {
         to_XYZ: Matrix3x3 {
             c0: Vector3 {
-                x: 0.43607469963825646,
-                y: 0.222504483975651,
-                z: 0.013932161672457605,
+                x: 0.4360219083775758,
+                y: 0.2224751872467074,
+                z: 0.013928117106761706,
             },
             c1: Vector3 {
-                x: 0.3850648611372289,
-                y: 0.716878635320373,
-                z: 0.09710449715679705,
+                x: 0.3851088006156898,
+                y: 0.7169066518920372,
+                z: 0.09710152837405213,
             },
             c2: Vector3 {
-                x: 0.1430804288791148,
-                y: 0.0606169168164421,
-                z: 0.714173287229624,
+                x: 0.14308127508123153,
+                y: 0.06061819697439862,
+                z: 0.7141585850968147,
             },
         },
         from_XYZ: Matrix3x3 {
             c0: Vector3 {
-                x: 3.133856249539148,
-                y: -0.9787684078627121,
-                z: 0.07194527939311902,
+                x: 3.1343114039056417,
+                y: -0.9787437136662901,
+                z: 0.07194820563461289,
             },
             c1: Vector3 {
-                x: -1.6168669988366775,
-                y: 1.9161416785529983,
-                z: -0.22899148609006847,
+                x: -1.6172327952102319,
+                y: 1.9161142278544896,
+                z: -0.228986525310954,
             },
             c2: Vector3 {
-                x: -0.49061436913474804,
-                y: 0.03345383938196561,
-                z: 1.4052427250084898,
+                x: -0.49068542505272716,
+                y: 0.03344963562366052,
+                z: 1.4052709721322223,
             },
         },
         transfer_function: TransferFunction::None,
@@ -264,19 +266,20 @@ impl ColorSpace {
 
     /// "Horizon light". A commonly used white point.
     /// https://en.wikipedia.org/wiki/Standard_illuminant
-    /// XYZ values sourced from here: http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
-    pub const D50_WHITE_POINT: XYZ = XYZ {
-        X: 0.96422,
-        Y: 1.0,
-        Z: 0.82521,
+    // Chromaticity values from here:
+    // https://en.wikipedia.org/wiki/Standard_illuminant
+    pub const D50_WHITE_POINT_2DEGREES: Chromaticity = Chromaticity {
+        x: 0.34567,
+        y: 0.35850,
     };
 
     /// A white point that corresponds to average midday light in Western / Northern Europe:
     /// https://en.wikipedia.org/wiki/Illuminant_D65
-    pub const D65_WHITE_POINT: XYZ = XYZ {
-        X: 0.95047,
-        Y: 1.0,
-        Z: 1.08883,
+    // Chromaticity values from here:
+    // https://en.wikipedia.org/wiki/Standard_illuminant
+    pub const D65_WHITE_POINT_2DEGREES: Chromaticity = Chromaticity {
+        x: 0.31271,
+        y: 0.32902,
     };
 }
 
@@ -306,38 +309,25 @@ impl ColorSpaceConverter {
 /// (it has a yellow-ish whitepoint) then what appears white is produced
 /// with yellow-ish wavelenghts.
 ///
-/// This function first converts to a space that represents our eye's cone responses using a
-/// Bradford transform then converts back.
-/// V4 and earlier ICC profiles are specified with a D50 white point.
-/// The profile may use actually use a different white point, but the ICC
-/// profile requires that the color primaries be expressed in relation to D50.
-/// Profiles may include a 'chad' tag that specifies a matrix that was used
-/// to convert from primaries in relation to the original white point to D50.
+/// This function first converts to an intermediate space (LMS) that represents our eyes'
+/// cone responses using a Bradford transform then converts back.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChromaticAdaptation {
     pub(crate) inner_matrix: Matrix3x3,
 }
 
 impl ChromaticAdaptation {
-    pub fn new(source_white_point: XYZ, destination_white_point: XYZ) -> Self {
+    pub fn new(source_white_point: Chromaticity, destination_white_point: Chromaticity) -> Self {
         // Implemented using the techniques described here:
         // http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
 
         // To do math with the XYZ values convert them to Vector3s.
-        let source_white_point = Vector3::new(
-            source_white_point.X,
-            source_white_point.Y,
-            source_white_point.Z,
-        );
-        let destination_white_point = Vector3::new(
-            destination_white_point.X,
-            destination_white_point.Y,
-            destination_white_point.Z,
-        );
+        let source_white_point = source_white_point.to_XYZ().to_vector3();
+        let destination_white_point = destination_white_point.to_XYZ().to_vector3();
 
         // The Bradford matrix constants are found at the above link.
         // The matrix is also available here: https://en.wikipedia.org/wiki/LMS_color_space
-        // These matrices convert XYZ values to LMS values measuring the response of cones.
+        // These matrices convert XYZ values to LMS (Long Medium Short) values measuring the response of cones.
         let bradford_matrix = Matrix3x3 {
             c0: Vector3 {
                 x: 0.8951000,
@@ -412,7 +402,6 @@ pub const SRGBTransferFunction: TransferFunction = TransferFunction::ParametricC
     c: 0.0773993808, // 1.0 / 12.0
     d: 0.04045,
 };
-
 
 // The transfer function math is here is a bit different than that for sRGB on Wikipedia.
 // It is adapted from the Table 65 for ICC profiles on page 69.
