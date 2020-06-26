@@ -5,10 +5,30 @@ use crate::Color;
 // https://en.wikipedia.org/wiki/CIE_1931_color_space
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColorSpace {
-    to_XYZ: Matrix3x3,
-    from_XYZ: Matrix3x3,
-    transfer_function: TransferFunction,
+    pub(crate) to_XYZ: Matrix3x3,
+    pub(crate) from_XYZ: Matrix3x3,
+    pub(crate) transfer_function: TransferFunction,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransferFunction {
+    ParametricCurve {
+        gamma: f64,
+        a: f64,
+        b: f64,
+        c: f64,
+        d: f64,
+    },
+    None,
+}
+
+pub const SRGBTransferFunction: TransferFunction = TransferFunction::ParametricCurve {
+    gamma: 2.4,
+    a: 0.948,
+    b: 0.052,
+    c: 0.077,
+    d: 0.04,
+};
 
 /// Chromaticity values represent the hue of a color, irrespective of brightness
 #[derive(Debug, Copy, Clone)]
@@ -21,15 +41,6 @@ impl Chromaticity {
     pub fn new(x: f64, y: f64) -> Self {
         Chromaticity { x, y }
     }
-}
-/// If the color space stores RGB values nonlinearly this specifies how to make them linear.
-/// This should be possible to express numerically.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum TransferFunction {
-    /// Use the sRGB transfer function
-    SRGB,
-    /// The values are already linear
-    None,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -113,14 +124,11 @@ impl ColorSpace {
     /// Creates a color with the specified RGB values for the color space
     pub fn new_color(&self, r: f64, g: f64, b: f64, a: f64) -> Color {
         let rgb = Vector3::new(r, g, b);
-        let rgb = match self.transfer_function {
-            TransferFunction::SRGB => Vector3::new(
-                srgb_to_linear(rgb.x),
-                srgb_to_linear(rgb.y),
-                srgb_to_linear(rgb.z),
-            ),
-            TransferFunction::None => rgb,
-        };
+        let rgb = Vector3::new(
+            transfer_function_to_linear(rgb.x, &self.transfer_function),
+            transfer_function_to_linear(rgb.y, &self.transfer_function),
+            transfer_function_to_linear(rgb.z, &self.transfer_function),
+        );
         let XYZ = self.to_XYZ * rgb;
         Color {
             X: XYZ.x,
@@ -166,14 +174,11 @@ impl ColorSpace {
     pub fn color_to_rgba_unclipped(&self, color: &Color) -> (f64, f64, f64, f64) {
         let XYZ = Vector3::new(color.X, color.Y, color.Z);
         let rgb = self.from_XYZ * XYZ;
-        let rgb = match self.transfer_function {
-            TransferFunction::SRGB => Vector3::new(
-                linear_to_srgb(rgb.x),
-                linear_to_srgb(rgb.y),
-                linear_to_srgb(rgb.z),
-            ),
-            TransferFunction::None => rgb,
-        };
+        let rgb = Vector3::new(
+            transfer_function_from_linear(rgb.x, &self.transfer_function),
+            transfer_function_from_linear(rgb.y, &self.transfer_function),
+            transfer_function_from_linear(rgb.z, &self.transfer_function),
+        );
         (rgb.x, rgb.y, rgb.z, color.a)
     }
 
@@ -208,22 +213,22 @@ impl ColorSpace {
         },
         from_XYZ: Matrix3x3 {
             c0: Vector3 {
-                x: 3.133856052478418,
-                y: -0.9787683608686029,
-                z: 0.07194531250686317,
+                x: 3.133856249539148,
+                y: -0.9787684078627121,
+                z: 0.07194527939311902,
             },
             c1: Vector3 {
-                x: -1.6168663437735835,
-                y: 1.9161412999006184,
-                z: -0.22899133449586742,
+                x: -1.6168669988366775,
+                y: 1.9161416785529983,
+                z: -0.22899148609006847,
             },
             c2: Vector3 {
-                x: -0.4906148432537726,
-                y: 0.03345409228962241,
-                z: 1.405242677723986,
+                x: -0.49061436913474804,
+                y: 0.03345383938196561,
+                z: 1.4052427250084898,
             },
         },
-        transfer_function: TransferFunction::SRGB,
+        transfer_function: SRGBTransferFunction,
     };
 
     /// Exact same as the above SRGB space, except with a linear transfer function.
@@ -247,19 +252,19 @@ impl ColorSpace {
         },
         from_XYZ: Matrix3x3 {
             c0: Vector3 {
-                x: 3.133856052478418,
-                y: -0.9787683608686029,
-                z: 0.07194531250686317,
+                x: 3.133856249539148,
+                y: -0.9787684078627121,
+                z: 0.07194527939311902,
             },
             c1: Vector3 {
-                x: -1.6168663437735835,
-                y: 1.9161412999006184,
-                z: -0.22899133449586742,
+                x: -1.6168669988366775,
+                y: 1.9161416785529983,
+                z: -0.22899148609006847,
             },
             c2: Vector3 {
-                x: -0.4906148432537726,
-                y: 0.03345409228962241,
-                z: 1.405242677723986,
+                x: -0.49061436913474804,
+                y: 0.03345383938196561,
+                z: 1.4052427250084898,
             },
         },
         transfer_function: TransferFunction::None,
@@ -408,28 +413,39 @@ impl ChromaticAdaptation {
     }
 }
 
-// Sourced from Wikipedia: https://en.wikipedia.org/wiki/SRGB
-// If u is below 0 then then calculate the equation with the negation of the
-// absolute value of u. This is to match the expectations for extended sRGB
-// color spaces.
-fn linear_to_srgb(u: f64) -> f64 {
-    let sign = u.signum();
-    let u = u.abs();
-    let r = if u <= 0.0031308 {
-        u * 12.92
-    } else {
-        (1.055 * f64::powf(u, 1.0 / 2.4)) - 0.055
-    };
-    r * sign
+fn transfer_function_to_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
+    match transfer_function {
+        TransferFunction::ParametricCurve { gamma, a, b, c, d } => {
+            // Calculate with the absolute value of x if x is negative.
+            // It's technically not correct, but some extended color spaces like extended sRGB expect it.
+            let sign = x.signum();
+            let x = x.abs();
+            let x = if x >= *d {
+                f64::powf(a * x + b, *gamma)
+            } else {
+                x * c
+            };
+            x * sign
+        }
+        TransferFunction::None => x,
+    }
 }
 
-fn srgb_to_linear(u: f64) -> f64 {
-    let sign = u.signum();
-    let u = u.abs();
-    let r = if u <= 0.04045 {
-        u / 12.92
-    } else {
-        f64::powf((u + 0.055) / 1.055, 2.4)
-    };
-    r * sign
+fn transfer_function_from_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
+    // Some of these divisions could be precalculated to be removed for a performance increase.
+    match transfer_function {
+        TransferFunction::ParametricCurve { gamma, a, b, c, d } => {
+            // Calculate with the absolute value of x if x is negative.
+            // It's technically not correct, but some extended color spaces like extended sRGB expect it.
+            let sign = x.signum();
+            let x = x.abs();
+            let x = if x >= *d * c {
+                (f64::powf(x, 1.0 / *gamma) - b) / a
+            } else {
+                x / c
+            };
+            x * sign
+        }
+        TransferFunction::None => x,
+    }
 }

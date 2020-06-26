@@ -20,7 +20,7 @@ fn srgb_constant() {
         Chromaticity::new(0.3, 0.6),
         Chromaticity::new(0.15, 0.06),
         ColorSpace::D65_WHITE_POINT,
-        TransferFunction::SRGB,
+        SRGBTransferFunction,
     );
 
     assert!(srgb_color_space == ColorSpace::SRGB);
@@ -56,7 +56,10 @@ fn srgb_half_red() {
 fn srgb_negative() {
     let color_f64 = (-0.5, 0.0, 0.0, 0.0);
     let color = Color::new_srgb(color_f64.0, color_f64.1, color_f64.2, color_f64.3);
-    let color_rgba = color.to_srgb();
+    let color_rgba = color.to_srgb_unclipped();
+
+    println!("Color: {:?}", color);
+    println!("RGBA: {:?}", color_rgba);
     assert!(approx_equal(color_f64, color_rgba));
 }
 
@@ -72,20 +75,22 @@ fn display_p3_to_srgb() {
         Chromaticity { x: 0.265, y: 0.69 },
         Chromaticity { x: 0.15, y: 0.06 },
         ColorSpace::D65_WHITE_POINT,
-        TransferFunction::SRGB,
+        SRGBTransferFunction,
     );
 
     let color_p3 = (1.0, 0.1, 0.1, 1.0);
     let color = display_p3.new_color(color_p3.0, color_p3.1, color_p3.2, color_p3.3);
     let color_srgb_clipped = color.to_srgb();
+
     assert!(color_srgb_clipped == (1., 0., 0., 1.));
     let color_srgb_unclipped = color.to_srgb_unclipped();
+
     assert!(
         color_srgb_unclipped
             == (
-                1.0921701137654423,
-                -0.1951669535804862,
-                -0.09607887200241197,
+                1.0921589074740607,
+                -0.19534650519262395,
+                -0.09633875852684198,
                 1.0
             )
     );
@@ -99,17 +104,19 @@ fn srgb_to_display_p3() {
         Chromaticity { x: 0.265, y: 0.69 },
         Chromaticity { x: 0.15, y: 0.06 },
         ColorSpace::D65_WHITE_POINT,
-        TransferFunction::SRGB,
+        SRGBTransferFunction,
     );
 
     let color = Color::new_srgb(1.0, 0.1, 0.1, 1.0);
     let color_p3 = color.to_color_space(&display_p3);
+
+    println!("color_p3: {:?}", color_p3);
     assert!(
         color_p3
             == (
-                0.9183766263230951,
-                0.22905441360354956,
-                0.1790212430231814,
+                0.9183863452828327,
+                0.229110192530692,
+                0.1790666336717296,
                 1.0
             )
     );
