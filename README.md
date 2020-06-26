@@ -1,4 +1,4 @@
-# kettlecolor
+# kcolor
 A Rust library for handling color. (Work in progress)
 
 The primary goal of this library is to provide a simple way to handle colors when the output color space of a monitor is not known at compile time.

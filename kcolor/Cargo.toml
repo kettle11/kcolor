@@ -1,0 +1,8 @@
+[package]
+name = "kcolor"
+version = "0.1.0"
+authors = ["Ian Kettlewell <ian.kettlewell@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+kcolor_types = { path = "../kcolor_types" }

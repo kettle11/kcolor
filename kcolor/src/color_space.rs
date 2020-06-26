@@ -1,5 +1,5 @@
-use crate::math::*;
 use crate::Color;
+use kcolor_types::*;
 
 // An RGB color space expressed in relation to the CIE XYZ color space:
 // https://en.wikipedia.org/wiki/CIE_1931_color_space
@@ -8,52 +8,6 @@ pub struct ColorSpace {
     pub(crate) to_XYZ: Matrix3x3,
     pub(crate) from_XYZ: Matrix3x3,
     pub(crate) transfer_function: TransferFunction,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TransferFunction {
-    ParametricCurve {
-        gamma: f64,
-        a: f64,
-        b: f64,
-        c: f64,
-        d: f64,
-    },
-    None,
-}
-
-/// Chromaticity values represent the hue of a color, irrespective of brightness
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Chromaticity {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Chromaticity {
-    pub fn new(x: f64, y: f64) -> Self {
-        Chromaticity { x, y }
-    }
-
-    pub fn to_XYZ(&self) -> XYZ {
-        XYZ::new(self.x / self.y, 1.0, (1.0 - self.x - self.y) / self.y)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct XYZ {
-    pub X: f64,
-    pub Y: f64,
-    pub Z: f64,
-}
-
-impl XYZ {
-    pub fn new(X: f64, Y: f64, Z: f64) -> Self {
-        Self { X, Y, Z }
-    }
-
-    pub fn to_vector3(&self) -> Vector3 {
-        Vector3::new(self.X, self.Y, self.Z)
-    }
 }
 
 impl ColorSpace {
@@ -310,7 +264,9 @@ impl ColorSpaceConverter {
 /// with yellow-ish wavelenghts.
 ///
 /// This function first converts to an intermediate space (LMS) that represents our eyes'
-/// cone responses using a Bradford transform then converts back.
+/// cone responses using a Bradford transform.
+/// 
+/// Then a conversion is performed from the LMS intermediate space back into XYZ.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChromaticAdaptation {
     pub(crate) inner_matrix: Matrix3x3,
@@ -395,13 +351,14 @@ impl ChromaticAdaptation {
     }
 }
 
-pub const SRGBTransferFunction: TransferFunction = TransferFunction::ParametricCurve {
-    gamma: 2.4,
-    a: 0.94786729857,
-    b: 0.05213270142,
-    c: 0.0773993808, // 1.0 / 12.0
-    d: 0.04045,
-};
+pub const SRGBTransferFunction: TransferFunction =
+    TransferFunction::ParametricCurve(ParametricCurve::Function3 {
+        gamma: 2.4,
+        a: 0.94786729857,
+        b: 0.05213270142,
+        c: 0.0773993808, // 1.0 / 12.0
+        d: 0.04045,
+    });
 
 // The transfer function math is here is a bit different than that for sRGB on Wikipedia.
 // It is adapted from the Table 65 for ICC profiles on page 69.
@@ -411,7 +368,7 @@ pub const SRGBTransferFunction: TransferFunction = TransferFunction::ParametricC
 // http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
 fn transfer_function_to_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
     match transfer_function {
-        TransferFunction::ParametricCurve { gamma, a, b, c, d } => {
+        TransferFunction::ParametricCurve(ParametricCurve::Function3 { gamma, a, b, c, d }) => {
             // Calculate with the absolute value of x if x is negative.
             // It's technically not correct, but some extended color spaces like extended sRGB expect it.
             let sign = x.signum();
@@ -424,13 +381,13 @@ fn transfer_function_to_linear(x: f64, transfer_function: &TransferFunction) -> 
             x * sign
         }
         TransferFunction::None => x,
+        _ => unimplemented!(),
     }
 }
 
 fn transfer_function_from_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
-    // Some of these divisions could be precalculated to be removed for a performance increase.
     match transfer_function {
-        TransferFunction::ParametricCurve { gamma, a, b, c, d } => {
+        TransferFunction::ParametricCurve(ParametricCurve::Function3 { gamma, a, b, c, d }) => {
             // Calculate with the absolute value of x if x is negative.
             // It's technically not correct, but some extended color spaces like extended sRGB expect it.
             let sign = x.signum();
@@ -443,5 +400,6 @@ fn transfer_function_from_linear(x: f64, transfer_function: &TransferFunction) -
             x * sign
         }
         TransferFunction::None => x,
+        _ => unimplemented!(),
     }
 }

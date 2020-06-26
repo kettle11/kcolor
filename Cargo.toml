@@ -1,7 +1,6 @@
-[package]
-name = "kettlecolor"
-version = "0.1.0"
-authors = ["Ian Kettlewell <ian.kettlewell@gmail.com>"]
-edition = "2018"
-
-[dependencies]
+[workspace]
+members = [
+    "kcolor",
+    "kcolor_types",
+    "icc_parser",
+]

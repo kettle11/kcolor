@@ -1,4 +1,3 @@
-use crate::math::*;
 use crate::*;
 
 fn approx_equal_f64(a: f64, b: f64) -> bool {
@@ -56,7 +55,7 @@ fn rec2020_constant() {
         Chromaticity::new(0.170, 0.797),
         Chromaticity::new(0.131, 0.046),
         Chromaticity::new(0.3127, 0.3290),
-        SRGBTransferFunction,
+        SRGBTransferFunction, // This is not Rec. 2020's transfer function
     );
 }
 
