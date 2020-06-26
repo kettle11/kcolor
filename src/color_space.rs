@@ -22,14 +22,6 @@ pub enum TransferFunction {
     None,
 }
 
-pub const SRGBTransferFunction: TransferFunction = TransferFunction::ParametricCurve {
-    gamma: 2.4,
-    a: 0.948,
-    b: 0.052,
-    c: 0.077,
-    d: 0.04,
-};
-
 /// Chromaticity values represent the hue of a color, irrespective of brightness
 #[derive(Debug, Copy, Clone)]
 pub struct Chromaticity {
@@ -413,6 +405,21 @@ impl ChromaticAdaptation {
     }
 }
 
+pub const SRGBTransferFunction: TransferFunction = TransferFunction::ParametricCurve {
+    gamma: 2.4,
+    a: 0.94786729857,
+    b: 0.05213270142,
+    c: 0.0773993808, // 1.0 / 12.0
+    d: 0.04045,
+};
+
+
+// The transfer function math is here is a bit different than that for sRGB on Wikipedia.
+// It is adapted from the Table 65 for ICC profiles on page 69.
+// http://www.color.org/specification/ICC1v43_2010-12.pdf
+// IMPORTANT: That table has the '<' symbol incorrectly reversed for the second part of the domain.
+// That mistake is corrected in the Errata List as item 5:
+// http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
 fn transfer_function_to_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
     match transfer_function {
         TransferFunction::ParametricCurve { gamma, a, b, c, d } => {
