@@ -55,7 +55,7 @@ impl Chromaticity {
     }
 }
 
-/// A transfer function describes converting between a linear and non-linear color space.
+/// A transfer function describes how to convert to and from linear color space.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransferFunction {
     ParametricCurve(ParametricCurve),
@@ -66,6 +66,9 @@ pub enum TransferFunction {
 // IMPORTANT: That table has the '<' symbol incorrectly reversed for the second part of the domain.
 // That mistake is corrected in errata 5:
 // http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
+/// A parametric curve.
+/// The equations below are used to describe the transfer function to linear space
+/// from nonlinear space.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParametricCurve {
     /// X is the input value and Y is the returned value:
@@ -124,4 +127,82 @@ pub enum ParametricCurve {
         e: f64,
         f: f64,
     },
+}
+
+impl TransferFunction {
+    // The transfer function math is here is a bit different than that for sRGB on Wikipedia.
+    // It is adapted from the Table 65 for ICC profiles on page 69.
+    // http://www.color.org/specification/ICC1v43_2010-12.pdf
+    // IMPORTANT: That table has the '<' symbol incorrectly reversed for the second part of the domain.
+    // That mistake is corrected in the Errata List as item 5:
+    // http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
+    pub fn to_linear(&self, x: f64) -> f64 {
+        match self {
+            TransferFunction::ParametricCurve(ParametricCurve::Function3 { gamma, a, b, c, d }) => {
+                // Calculate with the absolute value of x if x is negative.
+                // It's technically not correct, but some extended color spaces like extended sRGB expect it.
+                let sign = x.signum();
+                let x = x.abs();
+                let x = if x >= *d {
+                    f64::powf(a * x + b, *gamma)
+                } else {
+                    x * c
+                };
+                x * sign
+            }
+            // This function has not yet been tested
+            TransferFunction::ParametricCurve(ParametricCurve::Function4 {
+                gamma,
+                a,
+                b,
+                c,
+                d,
+                e,
+                f,
+            }) => {
+                if x >= *d {
+                    f64::powf(a * x + b, *gamma) + e
+                } else {
+                    c * x + f
+                }
+            }
+            TransferFunction::None => x,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn from_linear(&self, x: f64) -> f64 {
+        match self {
+            TransferFunction::ParametricCurve(ParametricCurve::Function3 { gamma, a, b, c, d }) => {
+                // Calculate with the absolute value of x if x is negative.
+                // It's technically not correct, but some extended color spaces like extended sRGB expect it.
+                let sign = x.signum();
+                let x = x.abs();
+                let x = if x >= *d * c {
+                    (f64::powf(x, 1.0 / *gamma) - b) / a
+                } else {
+                    x / c
+                };
+                x * sign
+            }
+            // This function has not yet been tested
+            TransferFunction::ParametricCurve(ParametricCurve::Function4 {
+                gamma,
+                a,
+                b,
+                c,
+                d,
+                e,
+                f,
+            }) => {
+                if x >= *d * c + f {
+                    (f64::powf(x - e, 1.0 / *gamma) - b) / a
+                } else {
+                    (x - f) / c
+                }
+            }
+            TransferFunction::None => x,
+            _ => unimplemented!(),
+        }
+    }
 }

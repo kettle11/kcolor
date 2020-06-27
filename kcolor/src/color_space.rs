@@ -1,3 +1,4 @@
+use crate::white_points::*;
 use crate::Color;
 use kcolor_types::*;
 
@@ -50,11 +51,11 @@ impl ColorSpace {
         // If the color space being declared is not relative to the D50 white point then the primaries must
         // be converted to be relative to D50.
         // 2 degrees D50 is used because ICC profiles are always specified with the 2 degrees D50 white point.
-        let (to_XYZ, from_XYZ) = if white_point != Self::D50_WHITE_POINT_2DEGREES {
+        let (to_XYZ, from_XYZ) = if white_point != D50_WHITE_POINT_2DEGREES {
             let white_point_adaptation =
-                ChromaticAdaptation::new(white_point, Self::D50_WHITE_POINT_2DEGREES);
+                ChromaticAdaptation::new(white_point, D50_WHITE_POINT_2DEGREES);
             let white_point_adaptation_inverse =
-                ChromaticAdaptation::new(Self::D50_WHITE_POINT_2DEGREES, white_point);
+                ChromaticAdaptation::new(D50_WHITE_POINT_2DEGREES, white_point);
             (
                 white_point_adaptation.inner_matrix * Matrix3x3::from_columns(sr, sg, sb),
                 Matrix3x3::from_columns(sr, sg, sb).inverse()
@@ -76,9 +77,9 @@ impl ColorSpace {
     pub fn new_color(&self, r: f64, g: f64, b: f64, a: f64) -> Color {
         let rgb = Vector3::new(r, g, b);
         let rgb = Vector3::new(
-            transfer_function_to_linear(rgb.x, &self.transfer_function),
-            transfer_function_to_linear(rgb.y, &self.transfer_function),
-            transfer_function_to_linear(rgb.z, &self.transfer_function),
+            self.transfer_function.to_linear(rgb.x),
+            self.transfer_function.to_linear(rgb.y),
+            self.transfer_function.to_linear(rgb.z),
         );
         let XYZ = self.to_XYZ * rgb;
         Color {
@@ -126,115 +127,12 @@ impl ColorSpace {
         let XYZ = Vector3::new(color.X, color.Y, color.Z);
         let rgb = self.from_XYZ * XYZ;
         let rgb = Vector3::new(
-            transfer_function_from_linear(rgb.x, &self.transfer_function),
-            transfer_function_from_linear(rgb.y, &self.transfer_function),
-            transfer_function_from_linear(rgb.z, &self.transfer_function),
+            self.transfer_function.from_linear(rgb.x),
+            self.transfer_function.from_linear(rgb.y),
+            self.transfer_function.from_linear(rgb.z),
         );
         (rgb.x, rgb.y, rgb.z, color.a)
     }
-
-    /// The popular sRGB color space
-    /// https://en.wikipedia.org/wiki/SRGB
-    /// Conversion values in table below were calculated with this library.
-    /// Chromaticity of primaries as expressed in CIE XYZ 1931
-    /// Red primary x: 0.64 y: 0.33
-    /// Green primary x: 0.3 y: 0.6
-    /// Blue primary x: 0.15 y: 0.06
-    /// White point: D65
-    pub const SRGB: ColorSpace = ColorSpace {
-        to_XYZ: Matrix3x3 {
-            c0: Vector3 {
-                x: 0.4360219083775758,
-                y: 0.2224751872467074,
-                z: 0.013928117106761706,
-            },
-            c1: Vector3 {
-                x: 0.3851088006156898,
-                y: 0.7169066518920372,
-                z: 0.09710152837405213,
-            },
-            c2: Vector3 {
-                x: 0.14308127508123153,
-                y: 0.06061819697439862,
-                z: 0.7141585850968147,
-            },
-        },
-        from_XYZ: Matrix3x3 {
-            c0: Vector3 {
-                x: 3.1343114039056417,
-                y: -0.9787437136662901,
-                z: 0.07194820563461289,
-            },
-            c1: Vector3 {
-                x: -1.6172327952102319,
-                y: 1.9161142278544896,
-                z: -0.228986525310954,
-            },
-            c2: Vector3 {
-                x: -0.49068542505272716,
-                y: 0.03344963562366052,
-                z: 1.4052709721322223,
-            },
-        },
-        transfer_function: SRGBTransferFunction,
-    };
-
-    /// Exact same as the above SRGB space, except with a linear transfer function.
-    pub const SRGB_LINEAR: ColorSpace = ColorSpace {
-        to_XYZ: Matrix3x3 {
-            c0: Vector3 {
-                x: 0.4360219083775758,
-                y: 0.2224751872467074,
-                z: 0.013928117106761706,
-            },
-            c1: Vector3 {
-                x: 0.3851088006156898,
-                y: 0.7169066518920372,
-                z: 0.09710152837405213,
-            },
-            c2: Vector3 {
-                x: 0.14308127508123153,
-                y: 0.06061819697439862,
-                z: 0.7141585850968147,
-            },
-        },
-        from_XYZ: Matrix3x3 {
-            c0: Vector3 {
-                x: 3.1343114039056417,
-                y: -0.9787437136662901,
-                z: 0.07194820563461289,
-            },
-            c1: Vector3 {
-                x: -1.6172327952102319,
-                y: 1.9161142278544896,
-                z: -0.228986525310954,
-            },
-            c2: Vector3 {
-                x: -0.49068542505272716,
-                y: 0.03344963562366052,
-                z: 1.4052709721322223,
-            },
-        },
-        transfer_function: TransferFunction::None,
-    };
-
-    /// "Horizon light". A commonly used white point.
-    /// https://en.wikipedia.org/wiki/Standard_illuminant
-    // Chromaticity values from here:
-    // https://en.wikipedia.org/wiki/Standard_illuminant
-    pub const D50_WHITE_POINT_2DEGREES: Chromaticity = Chromaticity {
-        x: 0.34567,
-        y: 0.35850,
-    };
-
-    /// A white point that corresponds to average midday light in Western / Northern Europe:
-    /// https://en.wikipedia.org/wiki/Illuminant_D65
-    // Chromaticity values from here:
-    // https://en.wikipedia.org/wiki/Standard_illuminant
-    pub const D65_WHITE_POINT_2DEGREES: Chromaticity = Chromaticity {
-        x: 0.31271,
-        y: 0.32902,
-    };
 }
 
 /// If frequent color space conversions are to be performed, use this.
@@ -265,7 +163,7 @@ impl ColorSpaceConverter {
 ///
 /// This function first converts to an intermediate space (LMS) that represents our eyes'
 /// cone responses using a Bradford transform.
-/// 
+///
 /// Then a conversion is performed from the LMS intermediate space back into XYZ.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChromaticAdaptation {
@@ -348,58 +246,5 @@ impl ChromaticAdaptation {
             Y: v.y,
             Z: v.z,
         }
-    }
-}
-
-pub const SRGBTransferFunction: TransferFunction =
-    TransferFunction::ParametricCurve(ParametricCurve::Function3 {
-        gamma: 2.4,
-        a: 0.94786729857,
-        b: 0.05213270142,
-        c: 0.0773993808, // 1.0 / 12.0
-        d: 0.04045,
-    });
-
-// The transfer function math is here is a bit different than that for sRGB on Wikipedia.
-// It is adapted from the Table 65 for ICC profiles on page 69.
-// http://www.color.org/specification/ICC1v43_2010-12.pdf
-// IMPORTANT: That table has the '<' symbol incorrectly reversed for the second part of the domain.
-// That mistake is corrected in the Errata List as item 5:
-// http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
-fn transfer_function_to_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
-    match transfer_function {
-        TransferFunction::ParametricCurve(ParametricCurve::Function3 { gamma, a, b, c, d }) => {
-            // Calculate with the absolute value of x if x is negative.
-            // It's technically not correct, but some extended color spaces like extended sRGB expect it.
-            let sign = x.signum();
-            let x = x.abs();
-            let x = if x >= *d {
-                f64::powf(a * x + b, *gamma)
-            } else {
-                x * c
-            };
-            x * sign
-        }
-        TransferFunction::None => x,
-        _ => unimplemented!(),
-    }
-}
-
-fn transfer_function_from_linear(x: f64, transfer_function: &TransferFunction) -> f64 {
-    match transfer_function {
-        TransferFunction::ParametricCurve(ParametricCurve::Function3 { gamma, a, b, c, d }) => {
-            // Calculate with the absolute value of x if x is negative.
-            // It's technically not correct, but some extended color spaces like extended sRGB expect it.
-            let sign = x.signum();
-            let x = x.abs();
-            let x = if x >= *d * c {
-                (f64::powf(x, 1.0 / *gamma) - b) / a
-            } else {
-                x / c
-            };
-            x * sign
-        }
-        TransferFunction::None => x,
-        _ => unimplemented!(),
     }
 }

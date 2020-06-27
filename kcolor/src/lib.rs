@@ -12,5 +12,10 @@ pub use color_space::*;
 
 pub use kcolor_types::*;
 
+mod constant_color_spaces;
+pub mod white_points;
+
+pub use constant_color_spaces::*;
+
 #[cfg(test)]
 mod tests;

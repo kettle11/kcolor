@@ -1,3 +1,4 @@
+use crate::white_points::*;
 use crate::*;
 
 fn approx_equal_f64(a: f64, b: f64) -> bool {
@@ -18,19 +19,10 @@ fn srgb_constant() {
         Chromaticity::new(0.64, 0.33),
         Chromaticity::new(0.3, 0.6),
         Chromaticity::new(0.15, 0.06),
-        ColorSpace::D65_WHITE_POINT_2DEGREES,
-        SRGBTransferFunction,
+        D65_WHITE_POINT_2DEGREES,
+        SRGB_TRANSFER_FUNCTION,
     );
 
-    println!(
-        "XYZ D65: {:?}",
-        ColorSpace::D65_WHITE_POINT_2DEGREES.to_XYZ()
-    );
-
-    println!(
-        "XYZ D50: {:?}",
-        ColorSpace::D50_WHITE_POINT_2DEGREES.to_XYZ()
-    );
     assert!(srgb_color_space == ColorSpace::SRGB);
 }
 
@@ -41,22 +33,11 @@ fn srgb_linear_constant() {
         Chromaticity::new(0.64, 0.33),
         Chromaticity::new(0.3, 0.6),
         Chromaticity::new(0.15, 0.06),
-        ColorSpace::D65_WHITE_POINT_2DEGREES,
+        D65_WHITE_POINT_2DEGREES,
         TransferFunction::None,
     );
 
     assert!(srgb_linear_color_space == ColorSpace::SRGB_LINEAR);
-}
-
-#[test]
-fn rec2020_constant() {
-    let rec2020 = ColorSpace::new(
-        Chromaticity::new(0.708, 0.292),
-        Chromaticity::new(0.170, 0.797),
-        Chromaticity::new(0.131, 0.046),
-        Chromaticity::new(0.3127, 0.3290),
-        SRGBTransferFunction, // This is not Rec. 2020's transfer function
-    );
 }
 
 // Tests that sRGB values converted to and from a Color remain the same.
@@ -91,8 +72,8 @@ fn display_p3_to_srgb() {
         Chromaticity { x: 0.68, y: 0.32 },
         Chromaticity { x: 0.265, y: 0.69 },
         Chromaticity { x: 0.15, y: 0.06 },
-        ColorSpace::D65_WHITE_POINT_2DEGREES,
-        SRGBTransferFunction,
+        D65_WHITE_POINT_2DEGREES,
+        SRGB_TRANSFER_FUNCTION,
     );
 
     let color_p3 = (1.0, 0.1, 0.1, 1.0);
@@ -120,8 +101,8 @@ fn srgb_to_display_p3() {
         Chromaticity { x: 0.68, y: 0.32 },
         Chromaticity { x: 0.265, y: 0.69 },
         Chromaticity { x: 0.15, y: 0.06 },
-        ColorSpace::D65_WHITE_POINT_2DEGREES,
-        SRGBTransferFunction,
+        D65_WHITE_POINT_2DEGREES,
+        SRGB_TRANSFER_FUNCTION,
     );
 
     let color = Color::new_srgb(1.0, 0.1, 0.1, 1.0);
@@ -144,10 +125,8 @@ fn srgb_to_display_p3() {
 /// similar to different XYZ values under another white point.
 #[test]
 fn chromatic_adaptation() {
-    let chromatic_adaptation = ChromaticAdaptation::new(
-        ColorSpace::D65_WHITE_POINT_2DEGREES,
-        ColorSpace::D50_WHITE_POINT_2DEGREES,
-    );
+    let chromatic_adaptation =
+        ChromaticAdaptation::new(D65_WHITE_POINT_2DEGREES, D50_WHITE_POINT_2DEGREES);
 
     let expected = ChromaticAdaptation {
         inner_matrix: Matrix3x3 {

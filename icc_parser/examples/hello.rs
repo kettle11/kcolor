@@ -1,4 +1,3 @@
-use icc_parser::*;
 use std::fs;
 
 pub fn main() {
