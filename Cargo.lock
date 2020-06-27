@@ -3,6 +3,9 @@
 [[package]]
 name = "icc_parser"
 version = "0.1.0"
+dependencies = [
+ "kcolor_types 0.1.0",
+]
 
 [[package]]
 name = "kcolor"

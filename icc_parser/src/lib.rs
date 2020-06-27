@@ -5,11 +5,14 @@
 #[cfg(test)]
 mod tests;
 
+mod tags;
+pub use tags::*;
+
 use core::convert::TryInto;
+use kcolor_types::*;
 use std::str;
 
 #[derive(Debug)]
-
 pub enum TagData {
     DescriptionString(String),
     MultiLocalizedStrings(Vec<(Locale, String)>),
@@ -39,15 +42,8 @@ impl Locale {
     }
 }
 
-#[allow(non_snake_case)]
-#[derive(Debug)]
-pub struct XYZ {
-    pub X: f64,
-    pub Y: f64,
-    pub Z: f64,
-}
-
 /// A 4 byte ASCII string
+#[derive(PartialEq, Clone)]
 pub struct ShortString([u8; 4]);
 
 impl ShortString {
@@ -63,7 +59,6 @@ impl std::fmt::Debug for ShortString {
 }
 
 #[derive(Debug)]
-
 pub struct ColorProfile {
     pub header: Header,
     pub tags: Vec<(ShortString, TagData)>,
@@ -101,6 +96,7 @@ pub struct Header {
 pub enum ParseError {
     UnableToParse,
     UnimplementedInICCParser,
+    NoMoreTags,
 }
 
 #[derive(Debug)]
@@ -112,77 +108,13 @@ pub struct DateTime {
     minute: u16,
     second: u16,
 }
-#[derive(Debug)]
 
+#[derive(Debug)]
 pub enum RenderingIntent {
     Perceptual,
     MediaRelativeColorimetric,
     Saturation,
     ICCAbsoluteColorimetric,
-}
-
-// These definitions are from table 65 on page 69 of the specification.
-// IMPORTANT: That table has the '<' symbol incorrectly reversed for the second part of the domain.
-// That mistake is corrected in the Errata List as item 5:
-// http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
-#[derive(Debug)]
-pub enum ParametricCurve {
-    /// X is the input value and Y is the returned value:
-    ///
-    /// Y = X^gamma
-    Function0 { gamma: f64 },
-    /// X is the input value and Y is the returned value:
-    ///
-    /// if X >= -b / a {
-    ///     Y = (a * X + b) ^ gamma
-    /// } else {
-    ///     Y = 0.
-    /// }
-    Function1 { gamma: f64, a: f64, b: f64 },
-    /// X is the input value and Y is the returned value:
-    ///
-    /// if X >= -b / a {
-    ///     Y = (a * X + b) ^ gamma + c
-    /// } else {
-    ///     Y = c
-    /// }
-    Function2 { gamma: f64, a: f64, b: f64, c: f64 },
-    /// Used by sRGB
-    /// X is the input value and Y is the returned value:
-    ///
-    /// if X >= d {
-    ///     Y = (a * X + b) ^ gamma
-    /// } else {
-    ///     Y = (c * x)
-    /// }
-    Function3 {
-        gamma: f64,
-        a: f64,
-        b: f64,
-        c: f64,
-        d: f64,
-    },
-    /// This could be used by Rec. 2020
-    /// X is the input value and Y is the returned value:
-    ///
-    /// if X >= d {
-    ///     Y = (a * X + b) ^ gamma + e
-    /// } else {
-    ///     Y = c * X + f
-    /// }
-    ///
-    /// IMPORTANT: In the original specification the 'e' is mistakingly written as 'c'
-    /// That was fixed in correction 7:
-    /// http://www.color.org/specification/ICC1-2010_Cumulative_Errata_List_2019-05-29.pdf
-    Function4 {
-        gamma: f64,
-        a: f64,
-        b: f64,
-        c: f64,
-        d: f64,
-        e: f64,
-        f: f64,
-    },
 }
 
 // http://www.color.org/specification/ICC1v43_2010-12.pdf
@@ -215,14 +147,27 @@ pub enum ProfileClass {
     NamedColor,
 }
 
-struct ICCParser<'a> {
+pub struct ICCParser<'a> {
     i: usize, // Current position
+    current_tag: u32,
+    tag_count: u32,
     bytes: &'a [u8],
 }
 
 impl<'a> ICCParser<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { i: 0, bytes }
+    pub fn new(bytes: &'a [u8]) -> Result<Self, ParseError> {
+        let mut parser = Self {
+            i: 0,
+            current_tag: 0,
+            bytes,
+            tag_count: 0,
+        };
+
+        // Skip ahead and read the tag count, error if it can't be found
+        parser.i = 128;
+        parser.tag_count = parser.read_u32()?;
+        parser.i = 0;
+        Ok(parser)
     }
 
     fn read_u8(&mut self) -> Result<u8, ParseError> {
@@ -343,7 +288,7 @@ impl<'a> ICCParser<'a> {
         })
     }
 
-    fn parse_header(&mut self) -> Result<Header, ParseError> {
+    pub fn header(&mut self) -> Result<Header, ParseError> {
         // See section '7.2 Profile header' in this document
         // http://www.color.org/specification/ICC1v43_2010-12.pdf
 
@@ -416,8 +361,6 @@ impl<'a> ICCParser<'a> {
             _ => return Err(ParseError::UnableToParse),
         };
 
-        println!("RENDERING INTENT: {:?}", rendering_intent);
-
         let _always_zero = self.read_u16()?;
 
         // Contains nCIEXYZ values.
@@ -462,167 +405,4 @@ impl<'a> ICCParser<'a> {
             id,
         })
     }
-
-    fn parse_multi_localized_unicode(
-        &mut self,
-        tag_start: usize,
-    ) -> Result<Vec<(Locale, String)>, ParseError> {
-        // multilocalizedUnicodeType
-        // See section 10.13 page 61 of the specification
-
-        // A multi-localized string is a table of strings with language and country codes.
-
-        let number_of_records = self.read_u32()?;
-        // record_size is always equal to 12
-        let _record_size = self.read_u32()?;
-
-        let mut strings = Vec::with_capacity(number_of_records as usize);
-
-        for _ in 0..number_of_records {
-            let language_code = self.read_bytes(2)?;
-            let country_code = self.read_bytes(2)?;
-            // string_length is in bytes
-            let string_length = self.read_u32()?;
-            // Offset is from the start of the tag
-            let string_offset = self.read_u32()?;
-
-            let string =
-                self.read_u16_string(string_offset as usize + tag_start, string_length as usize)?;
-            println!("string: {:?}", string);
-
-            let locale = Locale::new(language_code, country_code);
-            strings.push((locale, string))
-            // For now nothing is done with this tag
-        }
-        Ok(strings)
-    }
-
-    // INCOMPLETE
-    fn parse_desc_data(&mut self) -> Result<String, ParseError> {
-        // This is based on the V2 spec:
-        // http://www.color.org/ICC_Minor_Revision_for_Web.pdf
-        // See page 6.5.17
-
-        // This is a description format defined in the V2 spec that
-        // seems to still be used in V4 profiles.
-        let ascii_length = self.read_u32()?;
-        let ascii_name = self.read_utf8_string(ascii_length as usize)?;
-        println!("ASCII NAME: {:?}", ascii_name);
-        let _unicode_language_code = self.read_u32()?;
-        let _unicode_length = self.read_u32()?;
-        // To-do unicode description goes here
-        let _script_code_code = self.read_u16()?;
-        let _mac_description_count = self.read_u8()?;
-        // To-do Read mac description here
-
-        Ok(ascii_name.to_owned())
-    }
-
-    fn parse_xyz_data(&mut self) -> Result<XYZ, ParseError> {
-        Ok(XYZ {
-            X: self.read_s15_fixed_16_number()?,
-            Y: self.read_s15_fixed_16_number()?,
-            Z: self.read_s15_fixed_16_number()?,
-        })
-    }
-
-    /// Parse parametric curve data.
-    /// See table 65 on page 69 of the specification.
-    fn parse_para_data(&mut self) -> Result<ParametricCurve, ParseError> {
-        let function_type = self.read_u16()?;
-        match function_type {
-            0 => Ok(ParametricCurve::Function0 {
-                gamma: self.read_s15_fixed_16_number()?,
-            }),
-
-            1 => Ok(ParametricCurve::Function1 {
-                gamma: self.read_s15_fixed_16_number()?,
-                a: self.read_s15_fixed_16_number()?,
-                b: self.read_s15_fixed_16_number()?,
-            }),
-
-            2 => Ok(ParametricCurve::Function2 {
-                gamma: self.read_s15_fixed_16_number()?,
-                a: self.read_s15_fixed_16_number()?,
-                b: self.read_s15_fixed_16_number()?,
-                c: self.read_s15_fixed_16_number()?,
-            }),
-            3 => Ok(ParametricCurve::Function3 {
-                gamma: self.read_s15_fixed_16_number()?,
-                a: self.read_s15_fixed_16_number()?,
-                b: self.read_s15_fixed_16_number()?,
-                c: self.read_s15_fixed_16_number()?,
-                d: self.read_s15_fixed_16_number()?,
-            }),
-            4 => Ok(ParametricCurve::Function4 {
-                gamma: self.read_s15_fixed_16_number()?,
-                a: self.read_s15_fixed_16_number()?,
-                b: self.read_s15_fixed_16_number()?,
-                c: self.read_s15_fixed_16_number()?,
-                d: self.read_s15_fixed_16_number()?,
-                e: self.read_s15_fixed_16_number()?,
-                f: self.read_s15_fixed_16_number()?,
-            }),
-            _ => Err(ParseError::UnableToParse),
-        }
-    }
-
-    fn parse_tag_data(&mut self, data_start: usize) -> Result<TagData, ParseError> {
-        use TagData::*;
-
-        // Reading at a different location, so preserve the old index.
-        let old_i = self.i;
-        self.i = data_start;
-        let type_signature = self.read_short_string()?;
-        let type_signature_str = type_signature.into_str();
-        println!("TYPE SIGNATURE: {:?}", type_signature_str);
-        let _reserved = self.read_u32()?;
-
-        let result = match type_signature_str {
-            "desc" => DescriptionString(self.parse_desc_data()?),
-            "mluc" => MultiLocalizedStrings(self.parse_multi_localized_unicode(data_start)?),
-            "XYZ " => XYZ(self.parse_xyz_data()?),
-            "para" => ParametricCurve(self.parse_para_data()?),
-            _ => Unknown,
-        };
-        self.i = old_i;
-
-        Ok(result)
-    }
-
-    fn parse_tags(&mut self) -> Result<Vec<(ShortString, TagData)>, ParseError> {
-        // See section 7.3 page 24 of the specification.
-        // The tag table includes the tag count following by a description
-        // of the various tags.
-        let tag_count = self.read_u32()?;
-        println!("Tag count: {:?}", tag_count);
-
-        let mut tag_data = Vec::with_capacity(tag_count as usize);
-
-        for _ in 0..tag_count {
-            let signature = self.read_short_string()?;
-            let offset = self.read_u32()?;
-            let size = self.read_u32()?;
-            println!(
-                "Signature: {:?} Offset: {:?} Size: {:?}",
-                signature, offset, size
-            );
-
-            tag_data.push((signature, self.parse_tag_data(offset as usize)?));
-        }
-        Ok(tag_data)
-    }
-
-    fn parse(&mut self) -> Result<ColorProfile, ParseError> {
-        let header = self.parse_header()?;
-        println!("HEADER: {:?}", header);
-        let tags = self.parse_tags()?;
-        let profile = Ok(ColorProfile { header, tags });
-        profile
-    }
-}
-
-pub fn parse_bytes(bytes: &[u8]) -> Result<ColorProfile, ParseError> {
-    let mut parser = ICCParser::new(bytes);
-    Ok(parser.parse()?)
 }
