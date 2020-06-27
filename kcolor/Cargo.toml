@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 kcolor_types = { path = "../kcolor_types" }
+icc_parser = { path = "../icc_parser" }

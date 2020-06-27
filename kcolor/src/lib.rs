@@ -17,5 +17,7 @@ pub mod white_points;
 
 pub use constant_color_spaces::*;
 
+mod icc;
+
 #[cfg(test)]
 mod tests;

@@ -150,3 +150,13 @@ fn chromatic_adaptation() {
 
     assert!(chromatic_adaptation == expected);
 }
+
+// Tests loading and parsing an ICC color profile.
+#[test]
+fn color_space_from_icc_profile() {
+    let bytes = std::fs::read("../icc_parser/examples/sRGB-v4.icc").expect("Could not find file");
+    let srgb = ColorSpace::from_icc_profile(&bytes).unwrap();
+    let color = srgb.new_color(0.5, 0.0, 0.0, 1.0);
+    let color = color.to_srgb();
+    println!("color: {:?}", color);
+}

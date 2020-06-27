@@ -5,8 +5,22 @@ use crate::*;
 #[derive(Clone, PartialEq, Debug)]
 
 pub struct Tag {
-    pub signature: ShortString,
+    pub tag_type: TagType,
     offset: u32,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum TagType {
+    Description,
+    WhitePoint,
+    BlackPoint,
+    RedPrimary,
+    GreenPrimary,
+    BluePrimary,
+    RedToneReproductionCurve,
+    GreenToneReproductionCurve,
+    BlueToneReproductionCurve,
+    Other(ShortString),
 }
 
 impl<'a> ICCParser<'a> {
@@ -14,13 +28,25 @@ impl<'a> ICCParser<'a> {
         if self.current_tag < self.tag_count {
             self.current_tag += 1;
             let (signature, offset, _size) = self.parse_tag_info(self.current_tag - 1)?;
-            Ok(Tag { signature, offset })
+            let tag_type = match signature.into_str() {
+                "desc" => TagType::Description,
+                "wtpt" => TagType::WhitePoint,
+                "bkpt" => TagType::BlackPoint,
+                "rXYZ" => TagType::RedPrimary,
+                "gXYZ" => TagType::GreenPrimary,
+                "bXYZ" => TagType::BluePrimary,
+                "rTRC" => TagType::RedToneReproductionCurve,
+                "gTRC" => TagType::GreenToneReproductionCurve,
+                "bTRC" => TagType::BlueToneReproductionCurve,
+                _ => TagType::Other(signature),
+            };
+            Ok(Tag { tag_type, offset })
         } else {
             Err(ParseError::NoMoreTags) // Not an error
         }
     }
 
-    pub fn tag_body(&mut self, tag: Tag) -> Result<TagData, ParseError> {
+    pub fn tag_data(&mut self, tag: Tag) -> Result<TagData, ParseError> {
         Ok(self.parse_tag_data(tag.offset as usize)?)
     }
 
@@ -43,7 +69,6 @@ impl<'a> ICCParser<'a> {
         self.i = data_start;
         let type_signature = self.read_short_string()?;
         let type_signature_str = type_signature.into_str();
-        println!("TYPE SIGNATURE: {:?}", type_signature_str);
         let _reserved = self.read_u32()?;
 
         let result = match type_signature_str {
@@ -83,7 +108,6 @@ impl<'a> ICCParser<'a> {
 
             let string =
                 self.read_u16_string(string_offset as usize + tag_start, string_length as usize)?;
-            println!("string: {:?}", string);
 
             let locale = Locale::new(language_code, country_code);
             strings.push((locale, string))
@@ -102,7 +126,6 @@ impl<'a> ICCParser<'a> {
         // seems to still be used in V4 profiles.
         let ascii_length = self.read_u32()?;
         let ascii_name = self.read_utf8_string(ascii_length as usize)?;
-        println!("ASCII NAME: {:?}", ascii_name);
         let _unicode_language_code = self.read_u32()?;
         let _unicode_length = self.read_u32()?;
         // To-do unicode description goes here
