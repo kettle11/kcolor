@@ -23,6 +23,7 @@ fn srgb_constant() {
         SRGB_TRANSFER_FUNCTION,
     );
 
+    println!("srgb_color_space: {:?}", srgb_color_space);
     assert!(srgb_color_space == ColorSpace::SRGB);
 }
 
@@ -37,6 +38,7 @@ fn srgb_linear_constant() {
         TransferFunction::None,
     );
 
+    println!("srgb_linear_color_space: {:?}", srgb_linear_color_space);
     assert!(srgb_linear_color_space == ColorSpace::SRGB_LINEAR);
 }
 
@@ -76,6 +78,7 @@ fn display_p3_to_srgb() {
         SRGB_TRANSFER_FUNCTION,
     );
 
+    println!("Display p3: {:?}", display_p3);
     let color_p3 = (1.0, 0.1, 0.1, 1.0);
     let color = display_p3.new_color(color_p3.0, color_p3.1, color_p3.2, color_p3.3);
     let color_srgb_clipped = color.to_srgb();
@@ -83,12 +86,13 @@ fn display_p3_to_srgb() {
     assert!(color_srgb_clipped == (1., 0., 0., 1.));
     let color_srgb_unclipped = color.to_srgb_unclipped();
 
+    println!("color_srgb_unclipped: {:?}", color_srgb_unclipped);
     assert!(
         color_srgb_unclipped
             == (
-                1.0921879782796478,
-                -0.19514273356049316,
-                -0.09605276588269357,
+                1.0921880006249804,
+                -0.19514295760642347,
+                -0.09605240128215847,
                 1.0
             )
     );
@@ -112,9 +116,9 @@ fn srgb_to_display_p3() {
     assert!(
         color_p3
             == (
-                0.9183615101484551,
-                0.22903577835661088,
-                0.17900683669777345,
+                0.9183615264512847,
+                0.22903562083862858,
+                0.17900698381299565,
                 1.0
             )
     );
@@ -128,6 +132,12 @@ fn chromatic_adaptation() {
     let chromatic_adaptation =
         ChromaticAdaptation::new(D65_WHITE_POINT_2DEGREES, D50_WHITE_POINT_2DEGREES);
 
+    println!("chromatic_adaptation: {:?}", chromatic_adaptation);
+
+    let chromatic_adaptation1 =
+        ChromaticAdaptation::new(D50_WHITE_POINT_2DEGREES, D65_WHITE_POINT_2DEGREES);
+
+    println!("chromatic_adaptation1: {:?}", chromatic_adaptation1);
     let expected = ChromaticAdaptation {
         inner_matrix: Matrix3x3 {
             c0: Vector3 {
@@ -158,5 +168,6 @@ fn color_space_from_icc_profile() {
     let srgb = ColorSpace::from_icc_profile(&bytes).unwrap();
     let color = srgb.new_color(0.5, 0.0, 0.0, 1.0);
     let color = color.to_srgb();
+    println!("color space: {:?}", srgb);
     println!("color: {:?}", color);
 }

@@ -34,37 +34,48 @@ impl ColorSpace {
         // Reference:
         // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
 
-        // First convert the chromaticities into XYZ values.
-        let r = red_primary.to_XYZ().to_vector3();
-        let g = green_primary.to_XYZ().to_vector3();
-        let b = blue_primary.to_XYZ().to_vector3();
+        let white_point_adaptation =
+            ChromaticAdaptation::new(white_point, D50_WHITE_POINT_2DEGREES);
 
-        let inverse = Matrix3x3::from_columns(r, g, b).inverse();
-        let s = inverse * white_point.to_XYZ().to_vector3();
+        // Convert the chromaticities to XYZ values and then calculate their
+        // relative relation to the white point.
+        let r = red_primary.to_XYZ();
+        let g = green_primary.to_XYZ();
+        let b = blue_primary.to_XYZ();
+        let white_point = white_point.to_XYZ();
 
-        // The three primaries in XYZ space relative to the white point passed in.
-        let sr = r * s.x;
-        let sg = g * s.y;
-        let sb = b * s.z;
+        let inverse = Matrix3x3::from_columns_xyz(r, g, b).inverse();
+        let s = inverse * white_point;
 
-        // The 2 degrees D50 white point is used to store colors internally
-        // If the color space being declared is not relative to the D50 white point then the primaries must
-        // be converted to be relative to D50.
-        // 2 degrees D50 is used because ICC profiles are always specified with the 2 degrees D50 white point.
-        let (to_XYZ, from_XYZ) = if white_point != D50_WHITE_POINT_2DEGREES {
-            let white_point_adaptation =
-                ChromaticAdaptation::new(white_point, D50_WHITE_POINT_2DEGREES);
-            let white_point_adaptation_inverse =
-                ChromaticAdaptation::new(D50_WHITE_POINT_2DEGREES, white_point);
-            (
-                white_point_adaptation.inner_matrix * Matrix3x3::from_columns(sr, sg, sb),
-                Matrix3x3::from_columns(sr, sg, sb).inverse()
-                    * white_point_adaptation_inverse.inner_matrix,
-            )
-        } else {
-            let to_XYZ = Matrix3x3::from_columns(sr, sg, sb);
-            (to_XYZ, to_XYZ.inverse())
-        };
+        // The three primaries relative to the white point
+        let sr = r * s.X;
+        let sg = g * s.Y;
+        let sb = b * s.Z;
+
+        // Adapt the primaries to D50.
+        let sr = white_point_adaptation.inner_matrix * sr;
+        let sg = white_point_adaptation.inner_matrix * sg;
+        let sb = white_point_adaptation.inner_matrix * sb;
+
+        // The primaries should all be shifted to be relative to D50.
+        Self::new_xyz_d50(sr, sg, sb, transfer_function)
+    }
+
+    /// Create a new color profile with XYZ coordinates for the primaries.
+    /// The XYZ coordinates should already be relative to D50, as is the case with
+    /// ICC profiles.
+    pub fn new_xyz_d50(
+        red_primary: XYZ,
+        green_primary: XYZ,
+        blue_primary: XYZ,
+        transfer_function: TransferFunction,
+    ) -> ColorSpace {
+        let r = red_primary.to_vector3();
+        let g = green_primary.to_vector3();
+        let b = blue_primary.to_vector3();
+
+        let to_XYZ = Matrix3x3::from_columns(r, g, b);
+        let from_XYZ = Matrix3x3::from_columns(r, g, b).inverse();
 
         Self {
             to_XYZ,

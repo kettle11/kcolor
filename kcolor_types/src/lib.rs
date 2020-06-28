@@ -21,6 +21,7 @@ impl XYZ {
         Self { X, Y, Z }
     }
 
+    // Does this function work as expected?
     pub fn to_chromaticity(&self) -> Chromaticity {
         Chromaticity {
             x: self.X / (self.X + self.Y + self.Z),
@@ -33,6 +34,19 @@ impl XYZ {
             x: self.X,
             y: self.Y,
             z: self.Z,
+        }
+    }
+}
+
+impl std::ops::Mul<f64> for XYZ {
+    type Output = XYZ;
+
+    #[inline]
+    fn mul(self, other: f64) -> XYZ {
+        XYZ {
+            X: self.X * other,
+            Y: self.Y * other,
+            Z: self.Z * other,
         }
     }
 }

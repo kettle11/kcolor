@@ -55,5 +55,6 @@ fn basic_run() {
     println!("Blue Primary: {:?}", blue_primary);
     println!("Green Primary: {:?}", green_primary);
 
+    println!("White point: {:?}", white_point);
     println!("Profile: {:?}", header);
 }

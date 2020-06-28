@@ -7,6 +7,7 @@ use crate::*;
 pub struct Tag {
     pub tag_type: TagType,
     offset: u32,
+    size: u32,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -20,14 +21,25 @@ pub enum TagType {
     RedToneReproductionCurve,
     GreenToneReproductionCurve,
     BlueToneReproductionCurve,
+    ChromaticAdaptationMatrix,
     Other(ShortString),
+}
+
+#[derive(Debug)]
+pub enum TagData {
+    DescriptionString(String),
+    MultiLocalizedStrings(Vec<(Locale, String)>),
+    XYZ(XYZ),
+    ParametricCurve(ParametricCurve),
+    Array9([f64; 9]), // This does not directly correspond to an item in the spec. It's just for convenience.
+    Unknown,
 }
 
 impl<'a> ICCParser<'a> {
     pub fn next_tag(&mut self) -> Result<Tag, ParseError> {
         if self.current_tag < self.tag_count {
             self.current_tag += 1;
-            let (signature, offset, _size) = self.parse_tag_info(self.current_tag - 1)?;
+            let (signature, offset, size) = self.parse_tag_info(self.current_tag - 1)?;
             let tag_type = match signature.into_str() {
                 "desc" => TagType::Description,
                 "wtpt" => TagType::WhitePoint,
@@ -35,19 +47,26 @@ impl<'a> ICCParser<'a> {
                 "rXYZ" => TagType::RedPrimary,
                 "gXYZ" => TagType::GreenPrimary,
                 "bXYZ" => TagType::BluePrimary,
-                "rTRC" => TagType::RedToneReproductionCurve,
-                "gTRC" => TagType::GreenToneReproductionCurve,
-                "bTRC" => TagType::BlueToneReproductionCurve,
+                // aarg, aagg, aabg were observedin Apple profiles. But where are they specified?
+                // Is there any issue with supporting them this way?
+                "rTRC" | "aarg" => TagType::RedToneReproductionCurve,
+                "gTRC" | "aagg" => TagType::GreenToneReproductionCurve,
+                "bTRC" | "aabg" => TagType::BlueToneReproductionCurve,
+                "chad" => TagType::ChromaticAdaptationMatrix,
                 _ => TagType::Other(signature),
             };
-            Ok(Tag { tag_type, offset })
+            Ok(Tag {
+                tag_type,
+                offset,
+                size,
+            })
         } else {
             Err(ParseError::NoMoreTags) // Not an error
         }
     }
 
     pub fn tag_data(&mut self, tag: Tag) -> Result<TagData, ParseError> {
-        Ok(self.parse_tag_data(tag.offset as usize)?)
+        Ok(self.parse_tag_data(tag.offset as usize, tag.size as usize)?)
     }
 
     pub(crate) fn parse_tag_info(
@@ -61,7 +80,11 @@ impl<'a> ICCParser<'a> {
         Ok((signature, offset, size))
     }
 
-    pub(crate) fn parse_tag_data(&mut self, data_start: usize) -> Result<TagData, ParseError> {
+    pub(crate) fn parse_tag_data(
+        &mut self,
+        data_start: usize,
+        size: usize,
+    ) -> Result<TagData, ParseError> {
         use TagData::*;
 
         // Reading at a different location, so preserve the old index.
@@ -76,11 +99,24 @@ impl<'a> ICCParser<'a> {
             "mluc" => MultiLocalizedStrings(self.parse_multi_localized_unicode(data_start)?),
             "XYZ " => XYZ(self.parse_xyz_data()?),
             "para" => ParametricCurve(self.parse_para_data()?),
+            "sf32" => self.parse_sf32(size)?,
             _ => Unknown,
         };
         self.i = old_i;
 
         Ok(result)
+    }
+
+    /// Super incorrect right now
+    pub fn parse_sf32(&mut self, tag_length: usize) -> Result<TagData, ParseError> {
+        // Each tag has 8 bytes for the signature and reserved area.
+        // If this is exactly 9 (as will be common for 3x3 matrices)
+        // then parse / store the data in a convenient way.
+        if tag_length - 8 == 36 {
+            Ok(TagData::Array9(self.read_s15_fixed_16_array_length_9()?))
+        } else {
+            Err(ParseError::UnimplementedInICCParser)
+        }
     }
 
     pub(crate) fn parse_multi_localized_unicode(
@@ -148,6 +184,7 @@ impl<'a> ICCParser<'a> {
     /// See table 65 on page 69 of the specification.
     fn parse_para_data(&mut self) -> Result<ParametricCurve, ParseError> {
         let function_type = self.read_u16()?;
+        let _reserved = self.read_u16();
         match function_type {
             0 => Ok(ParametricCurve::Function0 {
                 gamma: self.read_s15_fixed_16_number()?,

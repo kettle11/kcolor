@@ -13,16 +13,6 @@ use kcolor_types::*;
 use std::str;
 
 #[derive(Debug)]
-pub enum TagData {
-    DescriptionString(String),
-    MultiLocalizedStrings(Vec<(Locale, String)>),
-    XYZ(XYZ),
-    ParametricCurve(ParametricCurve),
-    Unknown,
-}
-
-#[derive(Debug)]
-
 pub struct Locale {
     language: [u8; 2],
     country: [u8; 2],
@@ -195,8 +185,33 @@ impl<'a> ICCParser<'a> {
         result
     }
 
+    fn read_i32(&mut self) -> Result<i32, ParseError> {
+        let result = Ok(i32::from_be_bytes(
+            (&self.bytes[self.i..self.i + 4])
+                .try_into()
+                .map_err(|_| ParseError::UnableToParse)?,
+        ));
+        self.i += 4;
+        result
+    }
     fn read_s15_fixed_16_number(&mut self) -> Result<f64, ParseError> {
-        Ok(self.read_u32()? as f64 / 65535.0)
+        let u = self.read_i32()?;
+        Ok(u as f64 / 65535.0)
+    }
+
+    /// Often 3x3 matrices will be parsed, so this is a special case for just those
+    fn read_s15_fixed_16_array_length_9(&mut self) -> Result<[f64; 9], ParseError> {
+        Ok([
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+            self.read_s15_fixed_16_number()?,
+        ])
     }
 
     fn read_short_string(&mut self) -> Result<ShortString, ParseError> {

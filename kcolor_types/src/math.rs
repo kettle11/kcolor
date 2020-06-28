@@ -82,6 +82,15 @@ impl Matrix3x3 {
     pub fn from_columns(c0: Vector3, c1: Vector3, c2: Vector3) -> Self {
         Matrix3x3 { c0, c1, c2 }
     }
+
+    pub fn from_columns_xyz(c0: XYZ, c1: XYZ, c2: XYZ) -> Self {
+        Matrix3x3 {
+            c0: c0.to_vector3(),
+            c1: c1.to_vector3(),
+            c2: c2.to_vector3(),
+        }
+    }
+
     pub fn row0(&self) -> Vector3 {
         Vector3::new(self.c0.x, self.c1.x, self.c2.x)
     }
@@ -165,6 +174,21 @@ impl Mul<Vector3> for Matrix3x3 {
             x: Vector3::dot(self.row0(), other),
             y: Vector3::dot(self.row1(), other),
             z: Vector3::dot(self.row2(), other),
+        }
+    }
+}
+
+use crate::XYZ;
+
+impl Mul<XYZ> for Matrix3x3 {
+    type Output = XYZ;
+    #[inline]
+    fn mul(self, other: XYZ) -> Self::Output {
+        let other = Vector3::new(other.X, other.Y, other.Z);
+        XYZ {
+            X: Vector3::dot(self.row0(), other),
+            Y: Vector3::dot(self.row1(), other),
+            Z: Vector3::dot(self.row2(), other),
         }
     }
 }
