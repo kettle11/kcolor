@@ -73,38 +73,21 @@ impl Color {
         color_space.color_to_rgba_unclipped(self)
     }
 
-    // A few constant colors
-    // Note that these colors are in xyz color space.
-    // It'd be nicer to specify them in sRGB, but that requires calling
-    // a conversion function and that's not OK for Rust constants.
-    pub const RED: Color = Color {
-        X: 0.41245643908969215,
-        Y: 0.2126728514056225,
-        Z: 0.019333895582329296,
-        a: 1.0,
-    };
-    pub const GREEN: Color = Color {
-        X: 0.3575760776439089,
-        Y: 0.7151521552878178,
-        Z: 0.11919202588130295,
-        a: 1.0,
-    };
-    pub const BLUE: Color = Color {
-        X: 0.1804374832663989,
-        Y: 0.07217499330655956,
-        Z: 0.9503040785363678,
-        a: 1.0,
-    };
-    pub const BLACK: Color = Color {
-        X: 0.0,
-        Y: 0.0,
-        Z: 0.0,
-        a: 0.0,
-    };
-    pub const WHITE: Color = Color {
-        X: 0.9504699999999999,
-        Y: 0.9999999999999999,
-        Z: 1.08883,
-        a: 1.0,
-    };
+    pub fn black() -> Color {
+        Color::new_xyza(0.0, 0.0, 0.0, 1.0)
+    }
+
+    pub fn white() -> Color {
+        Color::new_xyza(0.950, 1.0, 1.089, 1.0)
+    }
+
+    /// Interpolates between two colors in XYZ color space.
+    pub fn interpolate(&self, b: &Color, amount: f64) -> Color {
+        Color {
+            X: (b.X - self.X) * amount + self.X,
+            Y: (b.Y - self.Y) * amount + self.Y,
+            Z: (b.Z - self.Z) * amount + self.Z,
+            a: (b.a - self.a) * amount + self.a,
+        }
+    }
 }
